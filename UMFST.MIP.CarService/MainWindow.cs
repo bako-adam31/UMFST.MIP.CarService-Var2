@@ -26,20 +26,31 @@ namespace UMFST.MIP.CarService
             List<string> errorLog = new List<string>();
             int invalidCount = 0;
 
+            // ----- ÁTÍRT RÉSZ KEZDETE -----
+
+            // 1. LÉPÉS: A HELYI FÜGGVÉNY DEFINIÁLÁSA (LAMBDA HELYETT)
+            // Ez a metódus ugyanúgy hozzáfér az 'errorLog' és 'invalidCount'
+            // lokális változókhoz, mint a lambda tette.
+            void HandleJsonParseError(object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args)
+            {
+                // Ha hibát (pl. "BAD_DATE") talál, naplózza és folytassa
+                errorLog.Add($"JSON PARSE ERROR: {args.ErrorContext.Path} - {args.ErrorContext.Error.Message}");
+                invalidCount++;
+                args.ErrorContext.Handled = true; // Hiba kezelve, mehet tovább
+            }
+
+            // 2. LÉPÉS: A JSON BEÁLLÍTÁSOK LÉTREHOZÁSA
             // Mivel a JSON-ban hibás dátumok és számok vannak,
             // speciális beállítás kell a Newtonsoft-nak, hogy ne álljon le hibával.
             var jsonSettings = new JsonSerializerSettings
             {
-                Error = (sender, args) =>
-                {
-                    // Ha hibát (pl. "BAD_DATE") talál, naplózza és folytassa
-                    errorLog.Add($"JSON PARSE ERROR: {args.ErrorContext.Path} - {args.ErrorContext.Error.Message}");
-                    invalidCount++;
-                    args.ErrorContext.Handled = true; // Hiba kezelve, mehet tovább
-                },
+                // 3. LÉPÉS: A METÓDUS HOZZÁRENDELÉSE A LAMBDA HELYETT
+                Error = HandleJsonParseError,
                 DateFormatHandling = DateFormatHandling.IsoDateFormat,
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc
             };
+
+            // ----- ÁTÍRT RÉSZ VÉGE -----
 
             try
             {
@@ -187,7 +198,6 @@ namespace UMFST.MIP.CarService
             {
                 this.Cursor = Cursors.Default; // Várakozás vége
             }
-
         }
 
         private async void MainWindow_Load(object sender, EventArgs e)
