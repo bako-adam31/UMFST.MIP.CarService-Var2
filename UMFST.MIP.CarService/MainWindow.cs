@@ -26,11 +26,6 @@ namespace UMFST.MIP.CarService
             List<string> errorLog = new List<string>();
             int invalidCount = 0;
 
-            // ----- ÁTÍRT RÉSZ KEZDETE -----
-
-            // 1. LÉPÉS: A HELYI FÜGGVÉNY DEFINIÁLÁSA (LAMBDA HELYETT)
-            // Ez a metódus ugyanúgy hozzáfér az 'errorLog' és 'invalidCount'
-            // lokális változókhoz, mint a lambda tette.
             void HandleJsonParseError(object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args)
             {
                 // Ha hibát (pl. "BAD_DATE") talál, naplózza és folytassa
@@ -39,23 +34,18 @@ namespace UMFST.MIP.CarService
                 args.ErrorContext.Handled = true; // Hiba kezelve, mehet tovább
             }
 
-            // 2. LÉPÉS: A JSON BEÁLLÍTÁSOK LÉTREHOZÁSA
-            // Mivel a JSON-ban hibás dátumok és számok vannak,
-            // speciális beállítás kell a Newtonsoft-nak, hogy ne álljon le hibával.
             var jsonSettings = new JsonSerializerSettings
             {
-                // 3. LÉPÉS: A METÓDUS HOZZÁRENDELÉSE A LAMBDA HELYETT
+
                 Error = HandleJsonParseError,
                 DateFormatHandling = DateFormatHandling.IsoDateFormat,
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc
             };
 
-            // ----- ÁTÍRT RÉSZ VÉGE -----
 
             try
             {
-                // ----- 1. LÉPÉS: ADATBÁZIS TISZTÍTÁSA -----
-                // (EF6-ban a táblák tartalmát töröljük, a sémát meghagyjuk)
+
                 using (var db = new AppContext())
                 {
                     // Fontos a sorrend: Gyerek táblákat előbb!
@@ -78,8 +68,6 @@ namespace UMFST.MIP.CarService
                     jsonString = await client.GetStringAsync(jsonUrl);
                 }
 
-                // ----- 3. LÉPÉS: JSON FELDOLGOZÁSA -----
-                // (A `JsonDataRoot` osztályt használjuk, amit a 2. Fázisban hoztunk létre)
                 var dataRoot = JsonConvert.DeserializeObject<JsonDataRoot>(jsonString, jsonSettings);
 
                 // ----- 4. LÉPÉS: VALIDÁLÁS ÉS IMPORTÁLÁS -----
@@ -88,7 +76,7 @@ namespace UMFST.MIP.CarService
                     // --- SZERELŐK (Mechanics) ---
                     foreach (var mech in dataRoot.Mechanics)
                     {
-                        // VALIDÁLÁS (4. pont): Negatív "years"
+
                         if (mech.Years < 0)
                         {
                             errorLog.Add($"INVALID MECHANIC: Negative years for {mech.Name}");
@@ -145,7 +133,7 @@ namespace UMFST.MIP.CarService
                             continue;
                         }
 
-                        // VALIDÁLÁS (4. pont): Negatív értékek (Tasks, Parts)
+
                         bool hasInvalidTask = wo.Tasks.Any(t => t.LaborHours < 0 || t.Rate < 0);
                         bool hasInvalidPart = wo.Parts.Any(p => p.Quantity < 0 || p.UnitPrice < 0);
                         if (hasInvalidTask || hasInvalidPart)
@@ -179,14 +167,12 @@ namespace UMFST.MIP.CarService
                     await db.SaveChangesAsync();
                 }
 
-                // ----- 5. LÉPÉS: HIBANAPLÓ ÍRÁSA -----
                 errorLog.Insert(0, $"Total invalid entries skipped: {invalidCount}");
                 // Külön szálra helyezzük, hogy ne blokkolja a GUI-t
                 await Task.Run(() => File.WriteAllLines(logFilePath, errorLog));
 
                 MessageBox.Show($"Import Befejezve.\n{invalidCount} hibás bejegyzés átugorva.\nNapló mentve: {logFilePath}", "Import Kész", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                // ----- 6. LÉPÉS: GUI FRISSÍTÉSE -----
                 await LoadAllTabsData();
             }
             catch (Exception ex)
@@ -212,14 +198,11 @@ namespace UMFST.MIP.CarService
             await LoadDiagnosticsAsync();
         }
 
-        // Tölti be az adatokat a "Work Orders" fülre
         private async Task LoadWorkOrdersAsync()
         {
             using (var db = new AppContext())
             {
-                // Az .Include() létfontosságú, hogy az EF6 betöltse
-                // a kapcsolódó adatokat (Tasks, Parts, Invoice).
-                // Enélkül a 'ComputedTotalCost' 0 lesz és a színezés sem működik.
+
                 var workOrders = await db.WorkOrders
                     .Include(wo => wo.Tasks)
                     .Include(wo => wo.Parts)
@@ -231,7 +214,6 @@ namespace UMFST.MIP.CarService
             }
         }
 
-        // Tölti be az adatokat a "Clients & Cars" fül bal oldalára
         private async Task LoadClinetsAsync()
         {
             using (var db = new AppContext())
@@ -263,8 +245,6 @@ namespace UMFST.MIP.CarService
                 return;
             }
 
-            // 1. Kérjük le a kiválasztott objektumot
-            // A DataBoundItem az a 'Client' objektum, ami az adott sorhoz tartozik
             var selectedClient = dgvClinets.CurrentRow.DataBoundItem as Client;
 
             if (selectedClient == null) return;
@@ -272,8 +252,7 @@ namespace UMFST.MIP.CarService
             // 2. Töltsük be a kapcsolódó autókat az adatbázisból
             using (var db = new AppContext())
             {
-                // Lekérdezzük az autókat, ahol a 'ClientId' megegyezik
-                // a kiválasztott ügyfél 'ClientId'-jával.
+
                 dgvCars.DataSource = await db.Cars
                     .Where(c => c.ClientId == selectedClient.ClientId)
                     .ToListAsync();
@@ -288,8 +267,7 @@ namespace UMFST.MIP.CarService
             var wo = dgvWorkOrders.Rows[e.RowIndex].DataBoundItem as WorkOrder;
             if (wo == null) return;
 
-            // 2. Ellenőrizzük a 'paid' státuszt
-            // A 'wo.Invoice' lehet null, ha még nincs számla generálva!
+
             bool isPaid = wo.Invoice != null && wo.Invoice.IsPaid;
 
             // 3. Alkalmazzuk a színezést
@@ -309,16 +287,14 @@ namespace UMFST.MIP.CarService
         {
             if (e.RowIndex < 0 || e.RowIndex >= dgvTests.RowCount) return;
 
-            // 1. Kérjük le a 'Test' objektumot
             var test = dgvTests.Rows[e.RowIndex].DataBoundItem as Test;
             if (test == null) return;
 
-            // 2. Ellenőrizzük az 'Ok' státuszt
-            if (test.Ok == false) // A vizsga ezt kérte: highlight failed tests (ok=false)
+            if (test.Ok == false)
             {
                 // 3. Színezés
                 e.CellStyle.BackColor = Color.Red;
-                e.CellStyle.ForeColor = Color.White; // A szöveg legyen fehér, hogy látszódjon
+                e.CellStyle.ForeColor = Color.White;
             }
             else
             {
@@ -334,8 +310,7 @@ namespace UMFST.MIP.CarService
 
             try
             {
-                // 1. Olvassuk be a rácsban lévő adatokat
-                // A dgvWorkOrders.DataSource már tartalmazza a betöltött adatokat
+
                 var workOrders = dgvWorkOrders.DataSource as List<WorkOrder>;
                 if (workOrders == null)
                 {
@@ -343,7 +318,6 @@ namespace UMFST.MIP.CarService
                     return;
                 }
 
-                // 2. Olvassuk be a hibák számát a log fájlból
                 try
                 {
                     string firstLine = File.ReadLines("invalid_car_service.txt").First();
@@ -354,7 +328,7 @@ namespace UMFST.MIP.CarService
                         int.TryParse(parts[1].Trim(), out invalidSkipped);
                     }
                 }
-                catch { /* Nem baj, ha a log fájl még nem létezik */ }
+                catch { }
 
 
                 // 3. Hozzuk létre a fájlt és írjunk bele
@@ -365,9 +339,7 @@ namespace UMFST.MIP.CarService
 
                     foreach (var wo in workOrders)
                     {
-                        // A vizsga "Dacia Duster", "VW Golf 7" neveket vár
-                        // Ezt a 'wo.Car.Make' és 'wo.Car.Model' mezőkből kapjuk meg
-                        // (Működik, mert a LoadWorkOrdersAsync-ban .Include(wo => wo.Car)-t használtunk)
+
                         string carName = (wo.Car != null) ? $"{wo.Car.Make} {wo.Car.Model}" : $"VIN: {wo.CarVin}";
 
                         string paidStatus = (wo.Invoice != null && wo.Invoice.IsPaid) ? "YES" : "NO";
